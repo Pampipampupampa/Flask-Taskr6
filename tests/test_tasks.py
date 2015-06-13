@@ -1,4 +1,5 @@
 # -*- coding:Utf8 -*-
+from __future__ import unicode_literals  # Python2 unicode
 
 
 import os

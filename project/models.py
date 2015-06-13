@@ -27,7 +27,8 @@ class Task(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'))
 
     def __init__(self, name, due_date, priority, posted_date, status, user_id):
-        super().__init__()
+        # super().__init__()  # Python3
+        super(Task, self).__init__()  # Python2 and Python3
         self.name = name
         self.due_date = due_date
         self.priority = priority
@@ -55,7 +56,8 @@ class User(db.Model):
     role = db.Column(db.String, default='user')
 
     def __init__(self, name=None, email=None, password=None, role=None):
-        super().__init__()
+        # super().__init__()  # Python3
+        super(User, self).__init__()  # Python2 and Python3
         self.name = name
         self.email = email
         self.password = password

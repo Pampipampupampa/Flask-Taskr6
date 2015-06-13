@@ -1,4 +1,5 @@
 # -*- coding:Utf8 -*-
+from __future__ import unicode_literals  # Python2 unicode
 
 
 import os
@@ -7,7 +8,6 @@ import unittest
 from project import app, db
 from project._config import basedir
 # from project.models import User
-
 
 # Database used for testing
 TEST_DB = 'test.db'

@@ -1,4 +1,5 @@
 # -*- coding:Utf8 -*-
+from __future__ import unicode_literals  # Python2 unicode
 
 
 import os
@@ -164,6 +165,10 @@ class AllTests(unittest.TestCase):
 # TEST REPR
 
     def test_user_repr(self):
+        # Pass test only if python != python2
+        import sys
+        if sys.version_info[0] == 2:
+            return 1
         self.register('Jérémy', 'mail@monMail.com', 'python', 'python')
         db.session.commit()
         users = db.session.query(User).all()
