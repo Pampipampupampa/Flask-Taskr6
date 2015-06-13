@@ -14,7 +14,7 @@ from project.models import User
 TEST_DB = 'test.db'
 
 
-class AllTests(unittest.TestCase):
+class UserTests(unittest.TestCase):
     """
         Users unit test.
     """

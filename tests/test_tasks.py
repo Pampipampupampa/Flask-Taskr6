@@ -182,8 +182,9 @@ class TasksTests(unittest.TestCase):
     def test_string_representation_of_the_task_object(self):
         from datetime import date
         # Foreign key constraint active by default on my sqlite3 build
-        # Need to add first a user before addind a task
-        db.session.add(User("Tester", "mail@mail.fr", "python"))
+        # Need to add first a user before adding a task
+        db.session.add(User("Tester", "mail@mail.fr",
+                            bcrypt.generate_password_hash("python")))
         db.session.add(Task("Test", date(2015, 1, 22), 10, date(2015, 1, 23),
                             1, 1))
         db.session.commit()
@@ -196,7 +197,8 @@ class TasksTests(unittest.TestCase):
 
     def test_task_repr(self):
         from datetime import date
-        db.session.add(User("Tester", "mail@mail.fr", "python"))
+        db.session.add(User("Tester", "mail@mail.fr",
+                            bcrypt.generate_password_hash("python")))
         db.session.add(Task("Test", date(2015, 1, 22), 10, date(2015, 1, 23),
                             1, 1))
         db.session.commit()

@@ -13,7 +13,7 @@ from project._config import basedir
 TEST_DB = 'test.db'
 
 
-class AllTests(unittest.TestCase):
+class MainTests(unittest.TestCase):
     """
         Users unit test.
     """
