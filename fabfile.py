@@ -8,6 +8,7 @@
 from fabric.api import local, settings, abort
 from fabric.contrib.console import confirm
 
+
 # Preparation
 def test():
     with settings(warn_only=True):
