@@ -57,6 +57,5 @@ docs/_build/
 # PyBuilder
 target/
 
-# Other
-*.log
+# Database
 *.db
