@@ -49,11 +49,10 @@ class APITests(unittest.TestCase):
 # HELPER METHODS
 
     def add_tasks(self):
-        # Foreign key constraint active by default on my sqlite3 build
-        # Need to add first a user before adding a task
-        db.session.add(User("Tester", "mail@mail.fr",
-                            bcrypt.generate_password_hash("python")))
-        db.session.commit()
+        """
+            Foreign key constraint active by default on my sqlite3 build.
+            Need to add first a user before adding a task.
+        """
         db.session.add(Task("Run around in circles", date(2015, 10, 22), 10,
                             date(2015, 10, 5), 1, 1))
         db.session.commit()
@@ -62,9 +61,16 @@ class APITests(unittest.TestCase):
                             date(2016, 2, 7), 1, 1))
         db.session.commit()
 
-# TESTS
+    def add_user(self):
+        db.session.add(User("Tester", "mail@mail.fr",
+                            bcrypt.generate_password_hash("python")))
+        db.session.commit()
+
+
+# TEST GET
 
     def test_collection_endpoint_returns_correct_data(self):
+        self.add_user()
         self.add_tasks()
         response = self.app.get("api/v1/tasks/", follow_redirects=True)
         self.assertEquals(response.status_code, 200)
@@ -73,6 +79,7 @@ class APITests(unittest.TestCase):
         self.assertIn(b'Purchase Real Python', response.data)
 
     def test_resource_endpoint_returns_correct_data(self):
+        self.add_user()
         self.add_tasks()
         response = self.app.get('api/v1/tasks/2', follow_redirects=True)
         self.assertEquals(response.status_code, 200)
@@ -81,12 +88,71 @@ class APITests(unittest.TestCase):
         self.assertNotIn(b'Run around in circles', response.data)
 
     def test_invalid_resource_endpoint_returns_error(self):
+        self.add_user()
         self.add_tasks()
         # A task id which not yet exist.
         response = self.app.get('api/v1/tasks/209', follow_redirects=True)
         self.assertEquals(response.status_code, 404)
         self.assertEquals(response.mimetype, 'application/json')
         self.assertIn(b'Element does not exist', response.data)
+
+
+# TEST POST
+
+    def test_existing_user_can_post_task_using_api(self):
+        # Add user.
+        self.add_user()
+        # Add task.
+        response = self.app.post('api/v1/tasks/',
+                                 data={"name": "Add a new task using POST API",
+                                       "user_name": "Tester",
+                                       "password": "python",
+                                       "priority": 2},
+                                 follow_redirects=True)
+        self.assertEquals(response.status_code, 201)
+        self.assertEquals(response.mimetype, 'application/json')
+        self.assertIn(b'"name": "Add a new task using POST API"', response.data)
+
+    def test_non_existing_user_cannot_post_task_using_api(self):
+        # Add user.
+        self.add_user()
+        # Add task.
+        response = self.app.post('api/v1/tasks/',
+                                 data={"name": "Add a new task using POST API",
+                                       "user_name": "Cracker",
+                                       "password": "crackcrack",
+                                       "priority": 2},
+                                 follow_redirects=True)
+        self.assertEquals(response.status_code, 401)
+        self.assertEquals(response.mimetype, 'application/json')
+        self.assertIn(b'User does not exist', response.data)
+
+    def test_existing_user_cannot_post_task_using_api_with_wrong_data(self):
+        """
+            Test password hash and priority range
+        """
+        # Add user.
+        self.add_user()
+        # Password test
+        response1 = self.app.post('api/v1/tasks/',
+                                  data={"name": "Add a new task using POST API",
+                                        "user_name": "Tester",
+                                        "password": "crackcrack",
+                                        "priority": 2},
+                                  follow_redirects=True)
+        self.assertEquals(response1.status_code, 401)
+        self.assertEquals(response1.mimetype, 'application/json')
+        self.assertIn(b'User does not exist', response1.data)
+        # Priority test
+        response2 = self.app.post('api/v1/tasks/',
+                                  data={"name": "Add a new task using POST API",
+                                        "user_name": "Tester",
+                                        "password": "python",
+                                        "priority": 333},
+                                  follow_redirects=True)
+        self.assertEquals(response2.status_code, 400)
+        self.assertEquals(response2.mimetype, 'application/json')
+        self.assertIn(b'error: priority must be between 1 and 10 included', response2.data)
 
 
 if __name__ == '__main__':

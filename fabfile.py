@@ -16,8 +16,6 @@ def test():
     if result.failed and not confirm("Tests failed. Continue and commit changes ?"):
         abort("Aborted at user request.")
 
-    local("nosetests -v")
-
 
 def commit():
     message = raw_input("Enter a git commit message: ")
