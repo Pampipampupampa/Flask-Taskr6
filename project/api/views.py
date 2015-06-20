@@ -6,8 +6,8 @@ from functools import wraps
 import datetime
 
 # Api using flask_restful
-from flask import flash, redirect, session, url_for
-from flask_restful import Resource, reqparse, abort
+from flask import session
+from flask_restful import Resource, reqparse, abort, fields, marshal
 
 # Api by hands using blueprint.
 # from flask import flash, redirect, jsonify, session, url_for, Blueprint, make_response
@@ -16,29 +16,29 @@ from project import db, bcrypt
 from project.models import Task, User
 
 
-# Parseur
-parser = reqparse.RequestParser()
-parser.add_argument('name', type=str)
-parser.add_argument('user_name', type=str)
-parser.add_argument('password', type=str)
-parser.add_argument('due_date', type=str)
-parser.add_argument('priority', type=int)
+# Return only defined field inside this dict using marshal and fields modules.
+task_fields = {
+    'name': fields.String,
+    'posted_date': fields.String,
+    'due_date': fields.String,
+    'priority': fields.Integer,
+    'status': fields.Integer
+}
 
 
 # Tools
-# def login_required(page):
-#     """
-#         Used as a decorator. It ensure that user is login before
-#         let him access to the decorated route.
-#     """
-#     @wraps(page)
-#     def wrapper(*args, **kwargs):
-#         if 'logged_in' in session:
-#             return page(*args, **kwargs)
-#         else:
-#             flash('You need to login first.')
-#             return redirect(url_for('users.login'))
-#     return wrapper
+def login_required(test):
+    """
+        Used as a decorator. It ensure that user is login before
+        let him access to the decorated route.
+    """
+    @wraps(test)
+    def wrapper(*args, **kwargs):
+        if 'logged_in' in session:
+            return test(*args, **kwargs)
+        else:
+            abort(403, message="error: You must be logged in before trying to update a task")
+    return wrapper
 
 
 def open_tasks():
@@ -49,11 +49,11 @@ def closed_tasks():
     return db.session.query(Task).filter_by(status='0').order_by(Task.due_date.asc())
 
 
-def abort_if_task_doesnt_exist(task_id, result):
+def abort_if_task_doesnt_exist(task_id, task):
     """
         Abort api demand if task_id does not exist.
     """
-    if not result or task_id != result.task_id:
+    if not task or task_id != task.task_id:
         abort(404, message="error: Element does not exist")
 
 
@@ -73,12 +73,33 @@ def abort_if_wrong_priority(priority):
         abort(400, message="error: priority must be between 1 and 10 included")
 
 
+def abort_if_wrong_user(user_id, task_user_id):
+    """
+        Abort api demand if wrong user ask access.
+    """
+    if session['role'] != "admin":
+        if user_id != task_user_id:
+            abort(400, message="error: A user can only update or delete it own tasks.")
+
+
 # Routes
 
 class ApiTasks(Resource):
     """
         Overload Api base class Resource.
     """
+    def __init__(self):
+        # Parser for add a new task.
+        self.parser = reqparse.RequestParser()
+        self.parser.add_argument('name', type=str, required=True,
+                                 help='A task need a task name.')
+        self.parser.add_argument('user_name', type=str, required=True)
+        self.parser.add_argument('password', type=str, required=True)
+        self.parser.add_argument('due_date', type=str, required=True,
+                                 help='Use this format: DD/MM/YYYY')
+        self.parser.add_argument('priority', type=int, required=True)
+        super(ApiTasks, self).__init__()
+
     def get(self):
         results = db.session.query(Task).limit(10).offset(0).all()
         json_results = []
@@ -100,14 +121,14 @@ class ApiTasks(Resource):
             Add Rest operation: POST.
         """
         # Recup arguments.
-        args = parser.parse_args()
+        args = self.parser.parse_args()
         # Recup user and password.
-        user = User.query.filter_by(name=args['user_name']).first()
+        user = db.session.query(User).filter_by(name=args['user_name']).first()
         password = args['password']
         # Test if user and password match.
         abort_if_user_doesnt_exist(user, password)
         # Convert date to correct datetime.date type.
-        date = datetime.datetime.strptime("22/4/3245", '%d/%m/%Y')
+        date = datetime.datetime.strptime(args['due_date'], '%d/%m/%Y')
         # Check priority and avoid priority > 10 or smaller than 1.
         priority = args["priority"]
         abort_if_wrong_priority(priority)
@@ -124,9 +145,10 @@ class ApiTasks(Resource):
         new_task = Task(**dict_task)
         db.session.add(new_task)
         db.session.commit()
-        user_added_dict = {data: dict_task[data] if "date" not in data
-                           else str(dict_task[data]) for data in dict_task}
-        return user_added_dict, 201
+        task = {data: dict_task[data] if "date" not in data
+                else str(dict_task[data]) for data in dict_task}
+        # Display new task.
+        return {'New task': marshal(task, task_fields)}, 201
 
 
 class ApiTaskId(Resource):
@@ -136,27 +158,54 @@ class ApiTaskId(Resource):
         Support for GET, PUT, and DELETE.
         Only GET working for now, other support will be add in the future.
     """
+
+    def __init__(self):
+        # Parser for update a task.
+        self.parser = reqparse.RequestParser()
+        self.parser.add_argument('name', type=str)
+        self.parser.add_argument('due_date', type=str)
+        self.parser.add_argument('priority', type=int)
+        self.parser.add_argument('status', type=int)
+        super(ApiTaskId, self).__init__()
+
     def get(self, task_id):
-        result = db.session.query(Task).filter_by(task_id=task_id).first()
-        abort_if_task_doesnt_exist(task_id, result)
-        json_result = {'task_id': result.task_id,
-                       'task name': result.name,
-                       'due date': str(result.due_date),
-                       'priority': result.priority,
-                       'posted date': str(result.posted_date),
-                       'status': result.status,
-                       'user id': result.user_id
+        task = db.session.query(Task).filter_by(task_id=task_id).first()
+        abort_if_task_doesnt_exist(task_id, task)
+        json_result = {'task_id': task.task_id,
+                       'name': task.name,
+                       'due_date': str(task.due_date),
+                       'priority': task.priority,
+                       'posted_date': str(task.posted_date),
+                       'status': task.status,
+                       'user_id': task.user_id
                        }
         # Call of jsonify by flask_restful.
-        return json_result, 200
+        return {'Corresponding Task': marshal(json_result, task_fields)}, 200
 
-    def put(self):
-        pass
+    @login_required
+    def put(self, task_id):
+        # Recup arguments.
+        args = self.parser.parse_args()
+        # Check if task exists.
+        task = db.session.query(Task).filter_by(task_id=task_id)
+        abort_if_task_doesnt_exist(task_id, task.first())
+        # Check if user logged_in is the task owner (or admin)
+        abort_if_wrong_user(session['user_id'], task.first().user_id)
+        # Test priority field value.
+        abort_if_wrong_priority(args['priority'])
+        # Update task with new fields.
+        for key, value in args.items():
+            if value is not None:
+                # Convert date to correct datetime.date type.
+                if key == 'due_date':
+                    value = datetime.datetime.strptime(value, '%d/%m/%Y')
+                task.update({key: value})
+        db.session.commit()
+        # Display task updated.
+        return {'Task updated': marshal(task.first(), task_fields)}, 201
 
-    def delete(self):
-        pass
-
-
+    # def delete(self):
+    #     pass
 
 
 ################################################################################

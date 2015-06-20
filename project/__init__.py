@@ -28,8 +28,8 @@ from flask_restful import Api
 from project.api.views import ApiTasks, ApiTaskId
 
 api = Api(app)
-api.add_resource(ApiTasks, '/api/v1/tasks/')
-api.add_resource(ApiTaskId, '/api/v1/tasks/<int:task_id>')
+api.add_resource(ApiTasks, '/api/v1/tasks/', endpoint='tasks')
+api.add_resource(ApiTaskId, '/api/v1/tasks/<int:task_id>', endpoint='task')
 
 
 # Add error handler
