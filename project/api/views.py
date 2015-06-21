@@ -5,12 +5,12 @@
 from functools import wraps
 import datetime
 
+# Api by hands using blueprint.
+# from flask import flash, redirect, jsonify, session, url_for, Blueprint, make_response
+
 # Api using flask_restful
 from flask import session
 from flask_restful import Resource, reqparse, abort, fields, marshal
-
-# Api by hands using blueprint.
-# from flask import flash, redirect, jsonify, session, url_for, Blueprint, make_response
 
 from project import db, bcrypt
 from project.models import Task, User
@@ -37,16 +37,8 @@ def login_required(test):
         if 'logged_in' in session:
             return test(*args, **kwargs)
         else:
-            abort(403, message="error: You must be logged in before trying to update a task")
+            abort(401, message="error: You must be logged in before trying to update a task")
     return wrapper
-
-
-def open_tasks():
-    return db.session.query(Task).filter_by(status='1').order_by(Task.due_date.asc())
-
-
-def closed_tasks():
-    return db.session.query(Task).filter_by(status='0').order_by(Task.due_date.asc())
 
 
 def abort_if_task_doesnt_exist(task_id, task):
@@ -59,10 +51,11 @@ def abort_if_task_doesnt_exist(task_id, task):
 
 def abort_if_user_doesnt_exist(user, password):
     """
-        Abort api demand if user name does not exist.
+        Abort api demand if user name does not exist or if user name and
+        password do not match an existing account.
     """
     if user is None or not bcrypt.check_password_hash(user.password, password):
-        abort(401, message="error: User does not exist")
+        abort(401, message="error: User does not exist or user name and password do not match.")
 
 
 def abort_if_wrong_priority(priority):
@@ -79,7 +72,7 @@ def abort_if_wrong_user(user_id, task_user_id):
     """
     if session['role'] != "admin":
         if user_id != task_user_id:
-            abort(400, message="error: A user can only update or delete it own tasks.")
+            abort(403, message="error: A user can only update or delete it own tasks.")
 
 
 # Routes
@@ -87,6 +80,7 @@ def abort_if_wrong_user(user_id, task_user_id):
 class ApiTasks(Resource):
     """
         Overload Api base class Resource.
+        Support for GET and POST.
     """
     def __init__(self):
         # Parser for add a new task.
@@ -101,7 +95,7 @@ class ApiTasks(Resource):
         super(ApiTasks, self).__init__()
 
     def get(self):
-        results = db.session.query(Task).limit(10).offset(0).all()
+        results = db.session.query(Task).limit(20).offset(0).all()
         json_results = []
         for result in results:
             data = {'task_id': result.task_id,
@@ -119,6 +113,8 @@ class ApiTasks(Resource):
     def post(self):
         """
             Add Rest operation: POST.
+            Implemented to allow posting whithout have to log in, but need to pass
+            password and user_name as arguments.
         """
         # Recup arguments.
         args = self.parser.parse_args()
@@ -148,7 +144,7 @@ class ApiTasks(Resource):
         task = {data: dict_task[data] if "date" not in data
                 else str(dict_task[data]) for data in dict_task}
         # Display new task.
-        return {'New task': marshal(task, task_fields)}, 201
+        return {'Task created': marshal(task, task_fields)}, 201
 
 
 class ApiTaskId(Resource):
@@ -156,7 +152,6 @@ class ApiTaskId(Resource):
         Overload Api base class Resource.
         Api on direct task id.
         Support for GET, PUT, and DELETE.
-        Only GET working for now, other support will be add in the future.
     """
 
     def __init__(self):
@@ -202,10 +197,20 @@ class ApiTaskId(Resource):
                 task.update({key: value})
         db.session.commit()
         # Display task updated.
-        return {'Task updated': marshal(task.first(), task_fields)}, 201
+        return {'Task updated': marshal(task.first(), task_fields)}, 200
 
-    # def delete(self):
-    #     pass
+    @login_required
+    def delete(self, task_id):
+        # Check if task exists.
+        task = db.session.query(Task).filter_by(task_id=task_id)
+        abort_if_task_doesnt_exist(task_id, task.first())
+        # Check if user logged_in is the task owner (or admin)
+        abort_if_wrong_user(session['user_id'], task.first().user_id)
+        # Delete task.
+        task.delete()
+        db.session.commit()
+        # Display task deleted.
+        return {'Task deleted': marshal(task.first(), task_fields)}, 200
 
 
 ################################################################################
